@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Activity Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .header h1 {
+            color: #2d3748;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #718096;
+            font-size: 1.1rem;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+
+        .status.connected {
+            background: #f0fff4;
+            color: #38a169;
+            border: 1px solid #9ae6b4;
+        }
+
+        .status.disconnected {
+            background: #fff5f5;
+            color: #e53e3e;
+            border: 1px solid #feb2b2;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status.connected .status-dot {
+            background: #38a169;
+        }
+
+        .status.disconnected .status-dot {
+            background: #e53e3e;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .events-container {
+            min-height: 300px;
+        }
+
+        .events-list {
+            list-style: none;
+        }
+
+        .event-item {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .event-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .event-item.push {
+            border-left-color: #4299e1;
+        }
+
+        .event-item.pull_request {
+            border-left-color: #ed8936;
+        }
+
+        .event-item.merge {
+            border-left-color: #48bb78;
+        }
+
+        .event-content {
+            font-size: 1.1rem;
+            line-height: 1.5;
+            margin-bottom: 8px;
+            color: #2d3748;
+        }
+
+        .event-time {
+            font-size: 0.9rem;
+            color: #718096;
+            font-style: italic;
+        }
+
+        .author {
+            font-weight: 600;
+            color: #5a67d8;
+        }
+
+        .branch {
+            font-weight: 500;
+            padding: 2px 6px;
+            background: #edf2f7;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Monaco', monospace;
+        }
+
+        .no-events {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .no-events h3 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4299e1;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            color: #718096;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 GitHub Activity Monitor</h1>
+            <p>Real-time tracking of repository events</p>
+        </div>
+
+        <div id="status" class="status disconnected">
+            <div class="status-dot"></div>
+            <span>Connecting...</span>
+        </div>
+
+        <div class="events-container">
+            <ul id="events-list" class="events-list">
+                <li class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading events...</p>
+                </li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            <p>Updates every 15 seconds • Last updated: <span id="last-updated">Never</span></p>
+        </div>
+    </div>
+
+    <script>
+        let isConnected = false;
+        let lastUpdateTime = null;
+
+        function updateStatus(connected) {
+            const statusEl = document.getElementById('status');
+            const statusText = statusEl.querySelector('span');
+            
+            isConnected = connected;
+            
+            if (connected) {
+                statusEl.className = 'status connected';
+                statusText.textContent = 'Connected';
+            } else {
+                statusEl.className = 'status disconnected';
+                statusText.textContent = 'Disconnected';
+            }
+        }
+
+        function formatTimestamp(isoString) {
+            const date = new Date(isoString);
+            const options = {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZoneName: 'short'
+            };
+            return date.toLocaleDateString('en-US', options);
+        }
+
+        function formatEventMessage(event) {
+            const author = `<span class="author">${event.author}</span>`;
+            const timestamp = formatTimestamp(event.timestamp);
+            
+            switch (event.action) {
+                case 'push':
+                    const toBranch = `<span class="branch">${event.to_branch}</span>`;
+                    return `${author} pushed to ${toBranch} on ${timestamp}`;
+                    
+                case 'pull_request':
+                    const fromBranch = `<span class="branch">${event.from_branch}</span>`;
+                    const targetBranch = `<span class="branch">${event.to_branch}</span>`;
+                    return `${author} submitted a pull request from ${fromBranch} to ${targetBranch} on ${timestamp}`;
+                    
+                case 'merge':
+                    const sourceBranch = `<span class="branch">${event.from_branch}</span>`;
+                    const destBranch = `<span class="branch">${event.to_branch}</span>`;
+                    return `${author} merged branch ${sourceBranch} to ${destBranch} on ${timestamp}`;
+                    
+                default:
+                    return `${author} performed ${event.action} on ${timestamp}`;
+            }
+        }
+
+        function renderEvents(events) {
+            const eventsList = document.getElementById('events-list');
+            
+            if (!events || events.length === 0) {
+                eventsList.innerHTML = `
+                    <li class="no-events">
+                        <h3>No events yet</h3>
+                        <p>Waiting for GitHub activity...</p>
+                    </li>
+                `;
+                return;
+            }
+            
+            eventsList.innerHTML = events.map(event => `
+                <li class="event-item ${event.action}">
+                    <div class="event-content">
+                        ${formatEventMessage(event)}
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        async function fetchEvents() {
+            try {
+                const response = await fetch('/api/events');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const events = await response.json();
+                renderEvents(events);
+                updateStatus(true);
+                
+                // Update last updated time
+                lastUpdateTime = new Date();
+                document.getElementById('last-updated').textContent = 
+                    lastUpdateTime.toLocaleTimeString();
+                    
+            } catch (error) {
+                console.error('Failed to fetch events:', error);
+                updateStatus(false);
+                
+                // Show error message if no events are displayed
+                const eventsList = document.getElementById('events-list');
+                if (eventsList.children.length === 0 || eventsList.querySelector('.loading')) {
+                    eventsList.innerHTML = `
+                        <li class="no-events">
+                            <h3>Connection Error</h3>
+                            <p>Unable to fetch events. Retrying...</p>
+                        </li>
+                    `;
+                }
+            }
+        }
+
+        // Initial load
+        fetchEvents();
+
+        // Poll every 15 seconds
+        setInterval(fetchEvents, 15000);
+
+        // Show when the page was loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('GitHub Activity Monitor loaded');
+        });
+    </script>
+</body>
+</html>

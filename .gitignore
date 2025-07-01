@@ -1,0 +1,14 @@
+.venv
+venv
+.env
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+*.pid
+__pycache__
+.vscode
+.env
+venv
